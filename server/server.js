@@ -23,7 +23,7 @@ server.listen(port, function() {
 // the clients information will be stored in socket parameter
 io.on('connection', function(socket) {
     console.log('someone conencted, Id: ' + socket.id);
-    var player;
+    var player = {};
     
     socket.on("imReady", (data) => {
         player = new Player(socket.id, data.name, Math.random() * 500, Math.random() * 500);
@@ -32,20 +32,22 @@ io.on('connection', function(socket) {
         socket.emit("yourId", {id: player.id});
         socket.broadcast.emit('newPlayer', player.getInitPack());
 
-        var initPack = [];
-        for(var i in players) {
-            initPack.push(players[i].getInitPack());
-        }
-        socket.emit("initPack", {initPack: initPack});
+        socket.emit("initPack", {initPack: getAllPlayersInitPack()});
     });
+
+    socket.on("inputData", (data) => {
+        player.mouseX = data.mouseX;
+        player.mouseY = data.mouseY;
+        player.angle = data.angle;
+        player.windowWidth = data.windowWidth;
+        player.windowHeight = data.windowHeight;
+    })
 
     socket.on("disconnect", () => {
         io.emit('someoneLeft', {id: socket.id});
-        for(var i in players) {
-            if(players[i].id === socket.id) {
-                players.splice(i, 1);
-            }
-        }
+
+
+        players = players.filter((element) => element.id !== socket.id);
     });
 
 })
@@ -59,15 +61,34 @@ var Player = function(id, name, x, y) {
     this.force = new Victor(0, 0);
     this.acceleration = new Victor(0, 0);
     this.speed = new Victor(0, 0);
-    this.mouseMaxForce = 0.1;
+    this.mouseMaxForce = 0.3;
     this.maxAcceleration = 3;
     this.maxSpeed = 3;
     this.mass = 1;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.angle = 0;
+    this.windowWidth = 0;
+    this.windowHeight = 0;
+
+    this.update = function() {
+        this.addForce(this.getForceTwardMouseLocation());
+        this.accelerate();
+        this.speedUp();
+        this.move();
+        this.zeroOutAcceleration();
+    }
+
+    this.getForceTwardMouseLocation = function() {
+        var force = new Victor(this.mouseX - this.windowWidth/2, this.mouseY - this.windowHeight/2);
+        force = limitVector(force, this.mouseMaxForce);
+        return force;
+    }
 
     // amountOfForce is a vector
     this.addForce = function(amountOfForce) {
         var force = amountOfForce;
-        this.force = force.divide(new Victor(mass, mass));
+        this.force = force.divide(new Victor(this.mass, this.mass));
     }
 
     this.accelerate = function() {
@@ -88,14 +109,6 @@ var Player = function(id, name, x, y) {
         this.acceleration = new Victor(0, 0);
     }
 
-    this.update = function() {
-        //this.addForce(this.getMouseForce());
-        this.accelerate();
-        this.speedUp();
-        this.move();
-        this.zeroOutAcceleration();
-    }
-
     this.getInitPack = function () {
         return {
             id: this.id,
@@ -104,14 +117,46 @@ var Player = function(id, name, x, y) {
             y: this.location.y
         }
     }
+
+    this.getUpdatePack = function () {
+        return {
+            id: this.id,
+            x: this.location.x,
+            y: this.location.y,
+            angle: this.angle,
+        }
+    }
     
     return this;
 }
 
 function limitVector(v, max) {
-    var vec = v;
-    var length = v.magnitude();
-    vec = v * max / length;
-    vec = v * max / length;
+    var vec = v.clone();
+
+    var mSq = vec.lengthSq();
+    if (mSq > max * max) {
+        vec = vec.divide(new Victor(Math.sqrt(mSq), Math.sqrt(mSq))).multiply(new Victor(max, max));
+    }
+    
     return vec;
 }
+
+function getAllPlayersInitPack() {
+    var initPack = [];
+    for(var i in players) {
+        initPack.push(players[i].getInitPack());
+    }
+    return initPack;
+}
+
+setInterval(() => {
+    var updatePack = [];
+
+    for(var i in players) {
+        players[i].update();
+        updatePack.push(players[i].getUpdatePack());
+    }
+
+    io.emit("updatePack", {updatePack});
+}, 1000/35)
+

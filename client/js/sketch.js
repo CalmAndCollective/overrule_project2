@@ -35,6 +35,18 @@ function setup() {
         }
     });
 
+    socket.on("updatePack", function(data) {
+        for(var i in data.updatePack) {
+            for(var j in players) {
+                if(players[j].id === data.updatePack[i].id) {
+                    players[j].location.x = data.updatePack[i].x;
+                    players[j].location.y = data.updatePack[i].y;
+                    players[j].angle = data.updatePack[i].angle;
+                }
+            }
+        }
+    });
+
     socket.on("someoneLeft", function(data) {
         for(var i in players) {
             if(players[i].id === data.id) {
@@ -50,6 +62,8 @@ function setup() {
 // this is called alot of times per second (FPS, frame per second)
 function draw() {
     background(51, 51, 255); // it gets a hex/rgb color
+    sendInputData();
+
 
     // TODO optimize this section
     for(var i in players) {
@@ -62,7 +76,6 @@ function draw() {
     rect(0, 0, 600, 600);
 
     for(var i in players) {
-        players[i].update();
         players[i].draw();
     }
 }
@@ -72,59 +85,13 @@ var Player = function(id, name, x, y) {
     this.id = id;
     this.name = name;
     this.location = createVector(x, y);
-    this.force = createVector(0, 0);
-    this.acceleration = createVector(0, 0);
-    this.speed = createVector(0, 0);
-    this.mouseMaxForce = 0.1;
-    this.maxAcceleration = 3;
-    this.maxSpeed = 3;
-    this.mass = 1;
-
-    this.getMouseForce = function() {
-        var force = createVector(mouseX - windowWidth/2, mouseY - windowHeight/2);
-        force.limit(this.mouseMaxForce);
-        force.div(this.mass);
-        return force;
-    }
-
-    // amountOfForce is a vector
-    this.addForce = function(amountOfForce) {
-        var force = amountOfForce;
-        this.force = force;
-    }
-
-    this.accelerate = function() {
-        this.acceleration.add(this.force);
-        this.acceleration.limit(this.maxAcceleration);
-    }
-
-    this.speedUp = function() {
-        this.speed.add(this.acceleration);
-        this.speed.limit(this.maxSpeed);
-    }
-
-    this.move = function() {
-        this.location.add(this.speed);
-    }
-
-    this.zeroOutAcceleration = function() {
-        this.acceleration = createVector(0, 0);
-    }
-
-    this.update = function() {
-        //this.addForce(this.getMouseForce());
-        this.accelerate();
-        this.speedUp();
-        this.move();
-        this.zeroOutAcceleration();
-    }
+    this.angle = 0;
 
     this.draw = function() {
-        var angle = atan2(mouseY - windowHeight/2, mouseX - windowWidth/2);
     
         push();
         translate(this.location.x, this.location.y);
-        rotate(angle);
+        rotate(this.angle);
         fill(255, 0, 0);
         beginShape();
         vertex(30 + 30, 0);
@@ -152,4 +119,9 @@ var Player = function(id, name, x, y) {
     return this;
 }
 
+
+function sendInputData() {
+    var angle = atan2(mouseY - windowHeight/2, mouseX - windowWidth/2);
+    socket.emit("inputData", {mouseX, mouseY, angle, windowWidth, windowHeight});
+}
 
